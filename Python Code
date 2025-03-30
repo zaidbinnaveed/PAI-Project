@@ -1,0 +1,156 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn import svm
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.ensemble import RandomForestClassifier
+from imblearn.over_sampling import SMOTE
+import base64
+from io import BytesIO
+
+# Function to load data
+def load_data(filepath):
+    """Load data from a given CSV file path."""
+    try:
+        data = pd.read_csv(filepath)
+        print("Data loaded successfully.")
+        return data
+    except Exception as e:
+        print("Error loading data:", e)
+        return None
+
+# Function to preprocess data
+def preprocess_data(data):
+    """Preprocess the data (handle missing values, encode categorical variables)."""
+    data['bmi'].fillna(data['bmi'].mean(), inplace=True)
+    data['age'] = data['age'].abs()
+    data['bmi'] = data['bmi'].abs()
+    categorical_columns = ['gender', 'ever_married', 'work_type', 'Residence_type', 'smoking_status']
+    data_encoded = pd.get_dummies(data, columns=categorical_columns, drop_first=True)
+    return data_encoded
+
+# Function for statistical analysis
+def statistical_analysis(data_encoded):
+    """Perform statistical analysis on the data."""
+    stats = {}
+    stats['mean_age'] = data_encoded['age'].mean()
+    stats['median_age'] = data_encoded['age'].median()
+    stats['mode_age'] = data_encoded['age'].mode()[0]
+    stats['mean_bmi'] = data_encoded['bmi'].mean()
+    stats['median_bmi'] = data_encoded['bmi'].median()
+    stats['mode_bmi'] = data_encoded['bmi'].mode()[0]
+    stats['mean_glucose'] = data_encoded['avg_glucose_level'].mean()
+    stats['std_dev_age'] = data_encoded['age'].std()
+    stats['correlations'] = data_encoded.corr()
+    return stats
+
+# Function to save plots to base64 for HTML display
+def save_plot_to_base64():
+    """Convert Matplotlib plots to base64-encoded images."""
+    buffer = BytesIO()
+    plt.savefig(buffer, format='png')
+    buffer.seek(0)
+    image_png = buffer.getvalue()
+    buffer.close()
+    return base64.b64encode(image_png).decode('utf-8')
+
+# Function to generate visualizations
+def generate_visualizations(data_encoded):
+    """Generate visualizations and return them as base64-encoded images."""
+    plots = {}
+    sns.set(style="whitegrid")
+
+    # Pie Chart for Stroke Incidence
+    plt.figure(figsize=(6, 6))
+    stroke_counts = data_encoded['stroke'].value_counts()
+    plt.pie(stroke_counts, labels=['No Stroke', 'Stroke'], autopct='%1.1f%%', startangle=90, colors=['skyblue', 'salmon'])
+    plt.title('Stroke Distribution')
+    plots['stroke_distribution'] = save_plot_to_base64()
+
+    # Scatter Plot for Age vs. Average Glucose Level
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(x='age', y='avg_glucose_level', hue='stroke', data=data_encoded, palette='coolwarm')
+    plt.title('Age vs. Average Glucose Level by Stroke')
+    plots['scatter_age_glucose'] = save_plot_to_base64()
+
+    # Boxplot for BMI Distribution by Stroke
+    plt.figure(figsize=(8, 6))
+    sns.boxplot(x=data_encoded['stroke'], y=data_encoded['bmi'])
+    plt.title('BMI Distribution by Stroke')
+    plots['boxplot_bmi'] = save_plot_to_base64()
+
+    # Correlation Heatmap
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(data_encoded.corr(), annot=True, fmt='.2f', cmap='coolwarm')
+    plt.title('Correlation Heatmap')
+    plots['heatmap'] = save_plot_to_base64()
+
+    # Histogram for Age Distribution
+    plt.figure(figsize=(8, 6))
+    sns.histplot(data_encoded['age'], kde=True, bins=30, color='blue')
+    plt.title('Age Distribution')
+    plt.xlabel('Age')
+    plt.ylabel('Frequency')
+    plots['age_histogram'] = save_plot_to_base64()
+
+    # Countplot for Gender Distribution
+    plt.figure(figsize=(8, 6))
+    sns.countplot(x='gender_Male', data=data_encoded, palette='coolwarm')
+    plt.title('Gender Distribution')
+    plt.xlabel('Gender')
+    plt.ylabel('Count')
+    plots['gender_distribution'] = save_plot_to_base64()
+
+    # Violin Plot for BMI by Stroke
+    plt.figure(figsize=(8, 6))
+    sns.violinplot(x='stroke', y='bmi', data=data_encoded, palette='muted')
+    plt.title('BMI Distribution by Stroke')
+    plt.xlabel('Stroke')
+    plt.ylabel('BMI')
+    plots['violin_bmi'] = save_plot_to_base64()
+
+    # Bar Plot for Work Type Distribution
+    work_type_counts = data_encoded['work_type_Private'].value_counts()
+    plt.figure(figsize=(8, 6))
+    sns.barplot(x=work_type_counts.index, y=work_type_counts.values, palette='pastel')
+    plt.title('Work Type Distribution')
+    plt.xlabel('Work Type')
+    plt.ylabel('Count')
+    plots['work_type_distribution'] = save_plot_to_base64()
+
+    return plots
+
+# Function to train models
+def train_models(data_encoded):
+    """Train SVM and Random Forest models and return their results."""
+    y = data_encoded['stroke']
+    X = data_encoded.drop('stroke', axis=1)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Train SVM
+    svm_model = svm.SVC(kernel='rbf', class_weight='balanced', C=1.0, random_state=42)
+    svm_model.fit(X_train_scaled, y_train)
+    y_pred_svm = svm_model.predict(X_test_scaled)
+    svm_results = {
+        'accuracy': accuracy_score(y_test, y_pred_svm),
+        'report': classification_report(y_test, y_pred_svm, output_dict=True)
+    }
+
+    # Train Random Forest
+    smote = SMOTE(random_state=42)
+    X_res, y_res = smote.fit_resample(X_train, y_train)
+    rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf_model.fit(X_res, y_res)
+    y_pred_rf = rf_model.predict(X_test)
+    rf_results = {
+        'accuracy': accuracy_score(y_test, y_pred_rf),
+        'report': classification_report(y_test, y_pred_rf, output_dict=True)
+    }
+
+    return {'svm': svm_results, 'random_forest': rf_results}
