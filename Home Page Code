@@ -1,0 +1,34 @@
+from flask import Flask, render_template, request
+from pai_project import load_data, preprocess_data, statistical_analysis, generate_visualizations, train_models
+
+app = Flask(_name_)
+
+# Route for the home page
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+# Route to handle data processing and display results
+@app.route('/result', methods=['POST'])
+def result():
+    # Get the uploaded file
+    file = request.files['file']
+
+    # Load and process the data
+    data = load_data(file)
+    data_encoded = preprocess_data(data)
+
+    # Perform statistical analysis
+    stats = statistical_analysis(data_encoded)
+
+    # Generate visualizations
+    plots = generate_visualizations(data_encoded)
+
+    # Train models and get results
+    ml_results = train_models(data_encoded)
+
+    # Render the results page
+    return render_template('result.html', stats=stats, plots=plots, ml_results=ml_results)
+
+if _name_ == '_main_':
+    app.run(debug=True)
